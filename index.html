@@ -298,6 +298,25 @@
             transform: none;
         }
         
+        /* Progress bar */
+        .progress-container {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            margin: 20px 0;
+            overflow: hidden;
+            display: none;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
         /* How to use section */
         .instructions {
             background: white;
@@ -409,6 +428,10 @@
                     </div>
                 </div>
                 
+                <div class="progress-container" id="progress-container">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                
                 <div class="controls">
                     <div class="control-group">
                         <label for="pdf-title">PDF Title</label>
@@ -486,6 +509,9 @@
     </footer>
 
     <script>
+        // Initialize jsPDF
+        const { jsPDF } = window.jspdf;
+        
         document.addEventListener('DOMContentLoaded', function() {
             const fileInput = document.getElementById('file-input');
             const dropArea = document.getElementById('drop-area');
@@ -494,8 +520,11 @@
             const convertBtn = document.getElementById('convert-btn');
             const downloadBtn = document.getElementById('download-btn');
             const pdfTitle = document.getElementById('pdf-title');
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
             
             let uploadedImages = [];
+            let pdfData = null;
             
             // File upload handling
             dropArea.addEventListener('click', function() {
@@ -567,6 +596,7 @@
                     }
                 } else {
                     convertBtn.disabled = true;
+                    downloadBtn.disabled = true;
                 }
                 
                 uploadedImages.forEach((image, index) => {
@@ -598,24 +628,94 @@
                 
                 convertBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Converting...';
                 convertBtn.disabled = true;
+                progressContainer.style.display = 'block';
                 
-                // Simulate conversion process
-                setTimeout(() => {
-                    convertBtn.innerHTML = '<i class="fas fa-check"></i> Conversion Complete!';
-                    downloadBtn.disabled = false;
-                    
-                    // Reset button after 2 seconds
-                    setTimeout(() => {
-                        convertBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Convert to PDF';
-                        convertBtn.disabled = false;
-                    }, 2000);
-                }, 1500);
+                // Get user selections
+                const pageSize = document.getElementById('page-size').value;
+                const orientation = document.getElementById('page-orientation').value;
+                
+                // Create PDF
+                createPDF(pageSize, orientation);
             });
+            
+            function createPDF(pageSize, orientation) {
+                // Create new PDF document
+                const doc = new jsPDF({
+                    orientation: orientation,
+                    unit: 'mm',
+                    format: pageSize
+                });
+                
+                const width = doc.internal.pageSize.getWidth();
+                const height = doc.internal.pageSize.getHeight();
+                
+                let processedImages = 0;
+                
+                // Process each image
+                uploadedImages.forEach((image, index) => {
+                    if (index > 0) {
+                        doc.addPage();
+                    }
+                    
+                    const img = new Image();
+                    img.src = image.src;
+                    
+                    img.onload = function() {
+                        // Calculate dimensions to fit the page
+                        const imgWidth = img.width;
+                        const imgHeight = img.height;
+                        const ratio = Math.min(width / imgWidth, height / imgHeight);
+                        const canvasWidth = imgWidth * ratio;
+                        const canvasHeight = imgHeight * ratio;
+                        
+                        // Add image to PDF
+                        doc.addImage(
+                            image.src,
+                            'JPEG',
+                            (width - canvasWidth) / 2,
+                            (height - canvasHeight) / 2,
+                            canvasWidth,
+                            canvasHeight
+                        );
+                        
+                        processedImages++;
+                        
+                        // Update progress
+                        const progress = (processedImages / uploadedImages.length) * 100;
+                        progressBar.style.width = progress + '%';
+                        
+                        // If all images processed, enable download
+                        if (processedImages === uploadedImages.length) {
+                            pdfData = doc.output('blob');
+                            
+                            convertBtn.innerHTML = '<i class="fas fa-check"></i> Conversion Complete!';
+                            downloadBtn.disabled = false;
+                            
+                            // Reset button after 2 seconds
+                            setTimeout(() => {
+                                convertBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Convert to PDF';
+                                convertBtn.disabled = false;
+                                progressContainer.style.display = 'none';
+                                progressBar.style.width = '0%';
+                            }, 2000);
+                        }
+                    };
+                });
+            }
             
             // Download PDF functionality
             downloadBtn.addEventListener('click', function() {
-                // In a real implementation, this would generate and download the actual PDF
-                alert('In a real implementation, this would download the PDF file. For demonstration purposes, this alert is shown instead.');
+                if (!pdfData) return;
+                
+                const fileName = pdfTitle.value || 'converted.pdf';
+                
+                // Create download link
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(pdfData);
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             });
         });
     </script>
